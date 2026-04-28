@@ -29,11 +29,12 @@ except ImportError:
 
 # LangChain @tool decorator (pure Python — safe on ARM64)
 try:
-    from langchain_core.tools import tool
+    from langchain_core.tools import tool  # type: ignore[assignment]
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     LANGCHAIN_AVAILABLE = False
-    def tool(func):  # type: ignore
+
+    def tool(func):  # type: ignore[no-redef]
         return func
 
 # OpenAI SDK (pure Python)
@@ -42,6 +43,54 @@ try:
     OPENAI_SDK_AVAILABLE = True
 except ImportError:
     OPENAI_SDK_AVAILABLE = False
+    OpenAI = None  # type: ignore[assignment,misc]
+    AzureOpenAI = None  # type: ignore[assignment,misc]
+
+
+# Lightweight Entra ID (Azure AD) token provider that shells out to the Azure CLI.
+# This avoids `azure-identity` which transitively requires `cryptography`
+# (Rust + MSVC). Works as long as the user has run `az login`.
+import json as _json
+import subprocess
+import threading
+import time as _time
+
+_AZ_TOKEN_LOCK = threading.Lock()
+_AZ_TOKEN_CACHE: dict = {"token": None, "expires_on": 0.0}
+
+
+def _get_az_cli_token(resource: str = "https://cognitiveservices.azure.com") -> str:
+    """Return a bearer token for `resource`, cached until ~5 minutes before expiry."""
+    now = _time.time()
+    with _AZ_TOKEN_LOCK:
+        if _AZ_TOKEN_CACHE["token"] and _AZ_TOKEN_CACHE["expires_on"] - now > 300:
+            return _AZ_TOKEN_CACHE["token"]
+
+        # `az` is a .cmd shim on Windows — shell=True keeps it simple.
+        result = subprocess.run(
+            f'az account get-access-token --resource "{resource}" -o json',
+            capture_output=True,
+            text=True,
+            shell=True,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                "Failed to acquire Entra ID token via `az account get-access-token`. "
+                "Make sure the Azure CLI is installed and you have run `az login`. "
+                f"stderr: {result.stderr.strip()}"
+            )
+        data = _json.loads(result.stdout)
+        token = data["accessToken"]
+        # expiresOn is "YYYY-MM-DD HH:MM:SS.ffffff"; fall back to now+50 min if parsing fails.
+        try:
+            from datetime import datetime
+            exp = datetime.strptime(data["expiresOn"], "%Y-%m-%d %H:%M:%S.%f").timestamp()
+        except Exception:
+            exp = now + 50 * 60
+        _AZ_TOKEN_CACHE["token"] = token
+        _AZ_TOKEN_CACHE["expires_on"] = exp
+        return token
 
 
 # ============================================================================
@@ -212,22 +261,40 @@ class SupportAgent:
 
 def create_support_agent():
     """Create the agent based on available env vars. Returns None for demo/mock mode."""
-    if not OPENAI_SDK_AVAILABLE:
+    if not OPENAI_SDK_AVAILABLE or OpenAI is None or AzureOpenAI is None:
         return None
 
     azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
     azure_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT")
     azure_key = os.getenv("AZURE_OPENAI_API_KEY")
+    azure_use_entra = os.getenv("AZURE_OPENAI_USE_ENTRA_ID", "").lower() in ("1", "true", "yes")
     openai_key = os.getenv("OPENAI_API_KEY")
+    api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-08-01-preview")
 
-    if azure_endpoint and azure_deployment and azure_key:
-        client = AzureOpenAI(
-            azure_endpoint=azure_endpoint,
-            api_key=azure_key,
-            api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-08-01-preview"),
-        )
-        # For Azure OpenAI, "model" must be the deployment name
-        return SupportAgent(client=client, model=azure_deployment, mode="foundry")
+    if azure_endpoint and azure_deployment:
+        # Prefer Entra ID when explicitly requested OR when no key is provided.
+        prefer_entra = azure_use_entra or not azure_key
+
+        if prefer_entra:
+            # Token provider: callable returning a fresh bearer token on each call.
+            def _token_provider() -> str:
+                return _get_az_cli_token("https://cognitiveservices.azure.com")
+
+            client = AzureOpenAI(
+                azure_endpoint=azure_endpoint,
+                azure_ad_token_provider=_token_provider,
+                api_version=api_version,
+            )
+            return SupportAgent(client=client, model=azure_deployment, mode="foundry")
+
+        if azure_key:
+            client = AzureOpenAI(
+                azure_endpoint=azure_endpoint,
+                api_key=azure_key,
+                api_version=api_version,
+            )
+            # For Azure OpenAI, "model" must be the deployment name
+            return SupportAgent(client=client, model=azure_deployment, mode="foundry")
 
     if openai_key:
         client = OpenAI(api_key=openai_key)
