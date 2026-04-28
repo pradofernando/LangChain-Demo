@@ -83,7 +83,8 @@ Three runtime modes, picked automatically based on environment variables:
 
 | Mode | Trigger | Uses |
 |---|---|---|
-| **Foundry** ⭐ | `AZURE_OPENAI_ENDPOINT` + `AZURE_OPENAI_DEPLOYMENT` + `AZURE_OPENAI_API_KEY` set | Real Azure OpenAI / Foundry-deployed model |
+| **Foundry (API key)** ⭐ | `AZURE_OPENAI_ENDPOINT` + `AZURE_OPENAI_DEPLOYMENT` + `AZURE_OPENAI_API_KEY` set | Real Azure OpenAI / Foundry-deployed model |
+| **Foundry (Entra ID)** 🔐 | `AZURE_OPENAI_ENDPOINT` + `AZURE_OPENAI_DEPLOYMENT` + `AZURE_OPENAI_USE_ENTRA_ID=true` | Same as above, but auth via `az login` token (no key needed) |
 | **OpenAI direct** | `OPENAI_API_KEY` set | OpenAI public API |
 | **Mock** | nothing set | Hard-coded, ticket-aware canned responses (perfect for offline trials) |
 
@@ -140,7 +141,9 @@ cd LangChain-Demo
 Skip this whole step to run in mock mode.
 
 1. In your **Microsoft Foundry** project → **Models + endpoints** → deploy a chat model that supports tool/function calling, e.g. `gpt-4o-mini`.
-2. Copy `.env.example` → `.env`, then fill in:
+2. Copy `.env.example` → `.env`, then pick **one** of the two auth options below.
+
+   **Option A — API key (simplest):**
 
    ```ini
    AZURE_OPENAI_ENDPOINT=https://<your-resource>.openai.azure.com/
@@ -148,6 +151,26 @@ Skip this whole step to run in mock mode.
    AZURE_OPENAI_API_KEY=<your-key>
    AZURE_OPENAI_API_VERSION=2024-08-01-preview
    ```
+
+   **Option B — Entra ID (required when key auth is disabled on the resource):**
+
+   ```ini
+   AZURE_OPENAI_ENDPOINT=https://<your-resource>.openai.azure.com/
+   AZURE_OPENAI_DEPLOYMENT=gpt-4o-mini
+   AZURE_OPENAI_API_VERSION=2024-08-01-preview
+   AZURE_OPENAI_USE_ENTRA_ID=true
+   ```
+
+   Then grant your user the **Cognitive Services OpenAI User** role on the Foundry resource and run `az login`:
+
+   ```powershell
+   az role assignment create `
+     --assignee "$(az ad signed-in-user show --query id -o tsv)" `
+     --role "Cognitive Services OpenAI User" `
+     --scope "/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/accounts/<resource-name>"
+   ```
+
+   The agent acquires a token by shelling out to `az account get-access-token` (cached ~50 min) — no `azure-identity` dependency required, which keeps the demo install pure-Python on Windows ARM64.
 
    `AZURE_OPENAI_DEPLOYMENT` is the **deployment name** you chose, not the underlying model name.
 
