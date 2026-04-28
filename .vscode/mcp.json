@@ -1,0 +1,41 @@
+{
+  "$schema": "https://aka.ms/vscode-mcp-schema",
+  "mcpServers": {
+    "support-agent": {
+      "type": "sse",
+      "url": "http://localhost:8080",
+      "description": "Support ticket analysis agent powered by LangChain",
+      "enabled": true,
+      "settings": {
+        "endpoint": "http://localhost:8080/chat/completions",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "timeout": 30000
+      },
+      "capabilities": {
+        "chat": true,
+        "streaming": false
+      },
+      "metadata": {
+        "displayName": "Support Agent",
+        "icon": "🎫",
+        "category": "productivity",
+        "triggers": [
+          "ticket",
+          "support",
+          "analyze ticket",
+          "summarize ticket",
+          "ticket analysis"
+        ]
+      }
+    }
+  },
+  "globalSettings": {
+    "timeout": 60000,
+    "retries": 2
+  },
+  "instructions": {
+    "support-agent": "Use this agent to analyze support tickets, provide summaries, and suggest next steps. Example: '@support-agent Summarize ticket #42 and suggest next steps.'"
+  }
+}

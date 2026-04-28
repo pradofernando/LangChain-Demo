@@ -1,0 +1,13 @@
+# All packages are pure Python — no C/Rust compiler needed (works on Windows ARM64)
+fastapi
+uvicorn
+pydantic
+python-dotenv
+
+# Azure OpenAI / OpenAI SDK (pure Python)
+openai
+
+# LangChain core abstractions (pure Python). We deliberately skip
+# langchain-openai because it pulls in tiktoken which needs a Rust toolchain.
+langchain
+langchain-core

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>langchain-foundry-demo-host</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Semantic Kernel for AI orchestration -->
+    <PackageReference Include="Microsoft.SemanticKernel" Version="1.11.1" />
+    
+    <!-- HTTP client for calling LangChain agent -->
+    <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.0" />
+    
+    <!-- Logging and configuration -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="9.0.0" />
+  </ItemGroup>
+
+</Project>

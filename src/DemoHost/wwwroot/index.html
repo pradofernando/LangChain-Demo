@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Support Agent — LangChain on Microsoft Foundry</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #0078d4 0%, #002050 100%);
+            min-height: 100vh;
+            color: #f3f3f3;
+            display: flex;
+            justify-content: center;
+            padding: 24px;
+        }
+        .container {
+            width: 100%;
+            max-width: 880px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        header {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 20px 24px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+        header h1 { font-size: 22px; margin-bottom: 4px; }
+        header p { font-size: 13px; opacity: 0.8; }
+        .badges { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+        .badge {
+            background: rgba(255,255,255,0.15);
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .status { font-size: 12px; opacity: 0.8; margin-top: 8px; }
+        .status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+        .dot.ok { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
+        .dot.bad { background: #f87171; }
+        .chat {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            min-height: 400px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .messages { flex: 1; display: flex; flex-direction: column; gap: 12px; max-height: 480px; overflow-y: auto; padding-right: 4px; }
+        .msg { padding: 12px 16px; border-radius: 10px; line-height: 1.55; font-size: 14px; }
+        .msg.user { background: #0078d4; align-self: flex-end; max-width: 80%; }
+        .msg.agent { background: rgba(255,255,255,0.12); align-self: flex-start; max-width: 90%; white-space: pre-wrap; }
+        .msg.agent strong { color: #93c5fd; }
+        .msg.system { background: rgba(255, 200, 0, 0.15); align-self: stretch; font-size: 12px; opacity: 0.85; text-align: center; }
+        .input-row { display: flex; gap: 8px; }
+        input[type=text] {
+            flex: 1;
+            padding: 12px 16px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(0,0,0,0.25);
+            color: #fff;
+            font-size: 14px;
+            font-family: inherit;
+        }
+        input[type=text]:focus { outline: none; border-color: #0078d4; }
+        button {
+            padding: 12px 24px;
+            border-radius: 10px;
+            border: none;
+            background: #0078d4;
+            color: #fff;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover { background: #106ebe; }
+        button:disabled { background: rgba(255,255,255,0.1); cursor: not-allowed; }
+        .examples { display: flex; gap: 8px; flex-wrap: wrap; }
+        .example {
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.15);
+            padding: 6px 12px;
+            border-radius: 16px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .example:hover { background: rgba(255,255,255,0.18); }
+        footer { text-align: center; font-size: 11px; opacity: 0.6; padding: 8px; }
+        .arch {
+            font-family: 'Consolas', monospace;
+            font-size: 11px;
+            white-space: pre;
+            opacity: 0.7;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎫 Support Agent</h1>
+            <p>LangChain agent hosted in Microsoft Foundry, orchestrated by .NET + Semantic Kernel</p>
+            <div class="badges">
+                <span class="badge">.NET 9</span>
+                <span class="badge">Semantic Kernel</span>
+                <span class="badge">LangChain</span>
+                <span class="badge">Microsoft Foundry</span>
+                <span class="badge">MCP for Copilot</span>
+            </div>
+            <div class="status">
+                <span class="dot" id="statusDot"></span>
+                <span id="statusText">Checking services…</span>
+            </div>
+            <div class="arch" id="archInfo"></div>
+        </header>
+
+        <div class="chat">
+            <div class="examples">
+                <span class="example" onclick="ask(this.innerText)">Summarize ticket #42 and suggest next steps</span>
+                <span class="example" onclick="ask(this.innerText)">What's the status of ticket #101?</span>
+                <span class="example" onclick="ask(this.innerText)">Analyze ticket #78 — what's the priority?</span>
+            </div>
+
+            <div class="messages" id="messages">
+                <div class="msg system">Try asking about tickets #42, #101, or #78</div>
+            </div>
+
+            <div class="input-row">
+                <input type="text" id="input" placeholder="Ask the support agent..." onkeydown="if(event.key==='Enter') send()" />
+                <button id="sendBtn" onclick="send()">Send</button>
+            </div>
+        </div>
+
+        <footer>
+            Frontend → .NET host (port 8080) → LangChain agent (port 8000) → Foundry-deployed model
+        </footer>
+    </div>
+
+    <script>
+        const messages = document.getElementById('messages');
+        const input = document.getElementById('input');
+        const sendBtn = document.getElementById('sendBtn');
+
+        async function checkHealth() {
+            try {
+                const r = await fetch('/health');
+                const data = await r.json();
+                document.getElementById('statusDot').className = 'dot ok';
+                document.getElementById('statusText').textContent = '.NET host healthy · LangChain endpoint: ' + data.langChainEndpoint;
+            } catch (e) {
+                document.getElementById('statusDot').className = 'dot bad';
+                document.getElementById('statusText').textContent = '.NET host unreachable';
+            }
+        }
+
+        function addMsg(text, cls) {
+            const div = document.createElement('div');
+            div.className = 'msg ' + cls;
+            div.textContent = text;
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+            return div;
+        }
+
+        function ask(text) {
+            input.value = text;
+            send();
+        }
+
+        async function send() {
+            const query = input.value.trim();
+            if (!query) return;
+
+            addMsg(query, 'user');
+            input.value = '';
+            sendBtn.disabled = true;
+
+            const placeholder = addMsg('Thinking…', 'agent');
+
+            try {
+                const r = await fetch('/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query })
+                });
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const data = await r.json();
+                placeholder.textContent = data.response || JSON.stringify(data);
+            } catch (e) {
+                placeholder.textContent = '❌ Error: ' + e.message;
+            } finally {
+                sendBtn.disabled = false;
+                input.focus();
+            }
+        }
+
+        checkHealth();
+    </script>
+</body>
+</html>

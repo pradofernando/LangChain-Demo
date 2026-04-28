@@ -1,0 +1,206 @@
+# ============================================================================
+# Microsoft Foundry Hosted Agent Manifest
+# ============================================================================
+# 
+# This manifest defines how to deploy the LangChain support agent to 
+# Microsoft Foundry. It includes both the .NET host and Python LangChain core.
+#
+# Deployment command:
+#   az foundry agent create --config ./foundry/agent.yaml --resource-group <RG> --foundry-name <NAME>
+#
+# ============================================================================
+
+apiVersion: foundry.microsoft.com/v1
+kind: HostedAgent
+
+metadata:
+  name: support-agent
+  description: "Support ticket analysis agent powered by LangChain and .NET"
+  version: "1.0.0"
+  tags:
+    - support
+    - langchain
+    - tickets
+
+# ============================================================================
+# CONTAINER CONFIGURATION
+# ============================================================================
+
+spec:
+  containers:
+    # .NET Host API (main entry point)
+    - name: dotnet-host
+      image: ${AZURE_CONTAINER_REGISTRY}/support-agent-host:${IMAGE_TAG}
+      port: 8080
+      resources:
+        requests:
+          cpu: "0.5"
+          memory: "512Mi"
+        limits:
+          cpu: "1.0"
+          memory: "1Gi"
+      env:
+        - name: ASPNETCORE_ENVIRONMENT
+          value: "Production"
+        - name: ASPNETCORE_URLS
+          value: "http://+:8080"
+        - name: LangChainAgent__BaseUrl
+          value: "http://localhost:8000"  # Sidecar on same pod
+      
+      # Health checks
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        initialDelaySeconds: 10
+        periodSeconds: 30
+      
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        initialDelaySeconds: 5
+        periodSeconds: 10
+    
+    # LangChain Agent (Python FastAPI sidecar)
+    - name: langchain-agent
+      image: ${AZURE_CONTAINER_REGISTRY}/langchain-agent:${IMAGE_TAG}
+      port: 8000
+      resources:
+        requests:
+          cpu: "0.5"
+          memory: "512Mi"
+        limits:
+          cpu: "1.0"
+          memory: "1Gi"
+      env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: LOG_LEVEL
+          value: "INFO"
+      
+      # Health checks
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8000
+        initialDelaySeconds: 15
+        periodSeconds: 30
+      
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8000
+        initialDelaySeconds: 10
+        periodSeconds: 10
+
+# ============================================================================
+# SCALING & PERFORMANCE
+# ============================================================================
+
+  scaling:
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+# ============================================================================
+# NETWORKING
+# ============================================================================
+
+  networking:
+    # Expose the .NET host API publicly
+    ingress:
+      enabled: true
+      targetPort: 8080
+      # HTTPS is enabled by default in Foundry
+      tls:
+        enabled: true
+    
+    # CORS settings for Copilot integration
+    cors:
+      allowedOrigins:
+        - "https://github.com"
+        - "https://vscode.dev"
+        - "vscode://github.copilot"
+      allowedMethods:
+        - GET
+        - POST
+        - OPTIONS
+      allowedHeaders:
+        - "*"
+
+# ============================================================================
+# SECURITY & AUTHENTICATION
+# ============================================================================
+
+  security:
+    # Enable Azure AD authentication (optional for demo, recommended for production)
+    authentication:
+      enabled: false  # Set to true and configure below for production
+      type: "AzureAD"
+      # tenantId: "your-tenant-id"
+      # clientId: "your-client-id"
+    
+    # Managed identity for Azure resource access
+    managedIdentity:
+      enabled: true
+      type: "SystemAssigned"
+
+# ============================================================================
+# MONITORING & LOGGING
+# ============================================================================
+
+  observability:
+    # Application Insights integration
+    applicationInsights:
+      enabled: true
+      # instrumentationKey will be auto-configured by Foundry
+    
+    # Log collection
+    logging:
+      level: "Information"
+      destinations:
+        - "ApplicationInsights"
+        - "AzureMonitor"
+    
+    # Metrics collection
+    metrics:
+      enabled: true
+      scrapeInterval: 30s
+
+# ============================================================================
+# DEPLOYMENT STRATEGY
+# ============================================================================
+
+  deployment:
+    strategy:
+      type: "RollingUpdate"
+      rollingUpdate:
+        maxSurge: 1
+        maxUnavailable: 0
+    
+    # Graceful shutdown
+    terminationGracePeriodSeconds: 30
+
+# ============================================================================
+# SECRETS & CONFIGURATION
+# ============================================================================
+# 
+# For production deployments, add secrets via Azure Key Vault:
+#
+# secrets:
+#   - name: OPENAI_API_KEY
+#     valueFrom:
+#       keyVault:
+#         name: "your-key-vault-name"
+#         key: "openai-api-key"
+#
+# Then reference in container env:
+#   env:
+#     - name: OPENAI_API_KEY
+#       valueFrom:
+#         secretRef:
+#           name: OPENAI_API_KEY
+#
+# ============================================================================
